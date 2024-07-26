@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any
 
-from parsers import decode_gnss_row, decode_uwb_row
+from .parsers import decode_gnss_row, decode_uwb_row
 
 
 DEFAULT_DIRECTORY = Path("results/v2")

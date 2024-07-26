@@ -7,8 +7,8 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from collectors import DataCollector
-from plots import FrequencyPlot
+from .collectors import DataCollector
+from .plots import FrequencyPlot
 
 DEFAULT_DIRECTORY = Path("results/v2")
 

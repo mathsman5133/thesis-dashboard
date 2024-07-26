@@ -3,9 +3,9 @@ import os
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets
 
-from collectors import DataCollector
-from plots import LocationPlot
-from replay import ReplayDriver
+from .collectors import DataCollector
+from .plots import LocationPlot
+from .replay import ReplayDriver
 
 
 class LoadDataPopup(pg.GraphicsLayoutWidget):

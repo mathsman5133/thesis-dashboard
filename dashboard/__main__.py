@@ -1,24 +1,21 @@
 import copy
 import time
-import threading
 import traceback
 
-import pyqtgraph
 import serial
 
-import sympy as sym
-import scipy
 from scipy.optimize import least_squares
 
 import pyqtgraph as pg
 # from pyqtgraph.Qt import QtWidgets
 
-from collectors import DataCollector
-from main_window import GraphicsLayout
-from parsers import decode_gnss, decode_uwb
-from plots import BaseRoverDiffPlot, FrequencyPlot, LocationPlot, UWBPlot
-from replay import ReplayDriver
-from utils import set_xaxis_timestamp_range
+from .collectors import DataCollector
+from .config import GNSS_SERIAL_PORT, GNSS_SERIAL_BAUD, UWB_SERIAL_PORT, UWB_SERIAL_BAUD
+from .main_window import GraphicsLayout
+from .parsers import decode_gnss, decode_uwb
+from .plots import BaseRoverDiffPlot, FrequencyPlot, LocationPlot, UWBPlot
+from .replay import ReplayDriver
+from .utils import set_xaxis_timestamp_range
 
 # BASE_STATION_COORDS = (0, 0)
 # BASE_STATION_COORDS = (6244942.8409, 333364.3062)  # northing, easting (centre of plot), sydney
@@ -72,8 +69,7 @@ def update_location(only_last: bool = True):
 def serial_gnss():
     while True:
         try:
-            # s = serial.Serial('/dev/cu.PL2303G-USBtoUART210', 115200)
-            s = serial.Serial('/dev/cu.PL2303G-USBtoUART10', 115200)
+            s = serial.Serial(GNSS_SERIAL_PORT, GNSS_SERIAL_BAUD)
             print("GNSS Connected!")
             break
         except Exception as e:
@@ -102,8 +98,7 @@ def serial_gnss():
 def serial_uwb():
     while True:
         try:
-            s = serial.Serial('/dev/cu.usbmodem00000000001A1', 115200)
-            # s = serial.Serial('/dev/cu.usbmodem206C366F42471', 115200)
+            s = serial.Serial(UWB_SERIAL_PORT, UWB_SERIAL_BAUD)
             print("UWB Connected!")
             break
         except Exception as e:
