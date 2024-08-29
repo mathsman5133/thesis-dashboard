@@ -1,9 +1,11 @@
 import copy
 import math
+import statistics
 
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 import pyqtgraph as pg
 
@@ -17,11 +19,22 @@ class BaseRoverDiffPlot(pg.PlotItem):
             axisItems={"bottom": pg.DateAxisItem()},
         )
         self.showGrid(x=True, y=True, alpha=0.3)
-        self.addLegend(offset=(-30, 10))
+        # self.addLegend(offset=(-30, 10))
         self.gps_curve = self.plot(name="GNSS", pen="cyan", )
         self.uwb_curve = self.plot(name="UWB", pen="pink")
 
         self.uwb_plot = None  # bit hacky, for now...
+
+        self.active_data = None
+        self.active_range = None
+
+        self.max_text = None
+        self.min_text = None
+        self.med_text = None
+        self.std_text = None
+
+        self.set_text()
+        self.sigXRangeChanged.connect(self.on_x_axis_changed)
 
     def truncate_ts(self, ts_ms, precision=50_000):
         ts = datetime.fromtimestamp(ts_ms)
@@ -63,8 +76,12 @@ class BaseRoverDiffPlot(pg.PlotItem):
 
         x = pd.DataFrame(gnss_uwb_diff.values())
         print(x)
-        y_rolling_avg5 = x.rolling(window=10).mean()
-        print(y_rolling_avg5)
+        y_rolling_avg5 = x.rolling(window=5).mean()
+        print(y_rolling_avg5, type(y_rolling_avg5))
+        self.active_data = y_rolling_avg5
+        if not self.active_data.empty:
+            print(len(self.active_data), len(gnss_uwb_diff.keys()))
+            self.active_data.index = pd.to_datetime(list(gnss_uwb_diff.keys()), unit='s', utc=True)
 
         # self.gps_curve.setData(gnss_times, gnss_dists)
         # self.uwb_curve.setData(uwb_times, uwb_dists)
@@ -74,6 +91,60 @@ class BaseRoverDiffPlot(pg.PlotItem):
         if gnss_times:
             self.uwb_plot.update_plots({"GNSS": list(zip(gnss_times, gnss_dists))})
 
+        self.update_text()
+
+    def set_text(self):
+        self.min_text = pg.TextItem("Min: {:.2f}m\nMax: 0.00m\nAvg: 0.00m\nStd: 0.00m".format(0), anchor=(-1, -0.1))
+        # self.addItem(self.min_text)
+        # self.max_text = pg.LabelItem("Max: {:.2f}m".format(0))
+        # self.med_text = pg.LabelItem("Avg: {:.2f}m".format(0))
+        # self.std_text = pg.LabelItem("Std: {:.2f}m".format(0))
+
+        self.min_text.setParentItem(self.graphicsItem())
+        # self.max_text.setParentItem(self.graphicsItem())
+        # self.med_text.setParentItem(self.graphicsItem())
+        # self.std_text.setParentItem(self.graphicsItem())
+
+        # self.min_text.anchor((1, 0))
+        # self.max_text.anchor((0, 0), (0.8, 0.15))
+        # self.med_text.anchor((0, 0), (0.8, 0.3))
+        # self.std_text.anchor((0, 0), (0.8, 0.45))
+
+    def update_text(self):
+        if self.active_range is None or self.active_data is None or self.active_data.empty:
+            return
+
+        print(self.active_data)
+        data = self.active_data.between_time(*self.active_range)
+        if data.empty:
+            print("no data")
+            return
+
+        min_val = float(data.min().iloc[0])
+        max_val = float(data.max().iloc[0])
+        med = float(data.mean().iloc[0])
+        std = float(data.std().iloc[0])
+
+        print("updating text: ", min_val, max_val, med, std)
+
+        self.min_text.setText("Min: {:.2f}m\n"
+                               "Max: {:.3f}m\n"
+                               "Avg: {:.3f}m\n"
+                               "Std: {:.3f}m".format(min_val, max_val, med, std))
+        # self.max_text.setText("Max: {:.2f}m".format(max_val))
+        # self.med_text.setText("Avg: {:.2f}m".format(med))
+        # self.std_text.setText("Std: {:.2f}m".format(std))
+
+    def on_x_axis_changed(self):
+        new_x = self.viewRange()[0]
+        to_set = []
+        for dt in new_x:
+            minus_10 = datetime.fromtimestamp(dt) - timedelta(hours=10)
+            to_set.append(str(minus_10.time()))
+
+        self.active_range = to_set
+        print(self.active_range)
+        self.update_text()
 
 
 class FrequencyPlot(pg.PlotItem):
@@ -112,7 +183,7 @@ class FrequencyPlot(pg.PlotItem):
                 self.plot_curves[anchor] = self.plot(
                     *zip(*data),
                     pen=pg.intColor(len(self.plot_curves)),
-                    name=anchor,
+                    name=f"Anchor {anchor}",
 
                 )
 
@@ -149,7 +220,7 @@ class UWBPlot(pg.PlotItem):
                 self.plot_curves[anchor] = self.plot(
                     *zip(*data),
                     pen=pg.intColor(len(self.plot_curves)),
-                    name=anchor,
+                    name=f"Anchor {anchor}",
                     # symbol="o"
                 )
 
@@ -198,7 +269,7 @@ class LocationPlot(pg.PlotItem):
                 pen=None,
                 symbolBrush=pg.intColor(len(self.plot_curves)),
                 symbolSize=2 if device == "GNSS" else 10,
-                name=device,
+                name=str(device),
                 symbol="x"
             )
         # self.set_location(device, easting - self.base_easting, northing - self.base_northing)

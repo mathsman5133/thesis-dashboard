@@ -25,6 +25,7 @@ class DataCollector:
 
         self.config = {}
         self.can_save = True
+        self.comp_type = None
 
         self.last_uwb = {}
         self.last_uwb_lock = threading.Lock()
@@ -109,7 +110,26 @@ class DataCollector:
                         self.localised_data = [decode_gnss_row(row) for row in reader]
                     else:
                         anchor = int(file.split("-")[1].split(".")[0])
-                        self.uwb_data[anchor] = [decode_uwb_row(row) for row in reader]
+                        self.uwb_data[anchor] = [decode_uwb_row(row, comp_type=self.comp_type) for row in reader]
+
+        self.calculate_localisation()
+
+    def on_comp_type_change(self, comp_type):
+        print(f"loading... {comp_type}")
+        self.comp_type = comp_type
+
+    def on_localisation_algo_change(self, algo):
+        print(f"loading... {algo}")
+        self.local_algo = algo
+        self.calculate_localisation()
+
+    def calculate_localisation(self):
+        if not self.gnss_data or not self.uwb_data:
+            return
+
+        if self.local_algo == "trilat-kf":
+
+        ...
 
     def clear(self, save_first: bool = True):
         if save_first:

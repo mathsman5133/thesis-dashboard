@@ -2,8 +2,7 @@ import struct
 
 
 from datetime import datetime
-
-import utm
+from .utils import apply_heuristic
 
 WINGELLO_UTM_ZONE = (56, "H")
 
@@ -103,6 +102,6 @@ def decode_gnss_row(row):
         return float(row[0]), 0, 0
 
 
-def decode_uwb_row(row):
-    return float(row[0]), float(row[1])
+def decode_uwb_row(row, comp_type=None):
+    return float(row[0]), apply_heuristic(float(row[1]), comp_type)
     # return datetime.fromtimestamp(float(row[0])), float(row[1])

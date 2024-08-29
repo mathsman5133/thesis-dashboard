@@ -40,6 +40,7 @@ window = GraphicsLayout(data_collector, replay_driver)
 uwb_plot = UWBPlot()
 base_rover_diff_plot = BaseRoverDiffPlot()
 base_rover_diff_plot.uwb_plot = uwb_plot
+
 freq_plot = FrequencyPlot()
 location_plot = LocationPlot(*data_collector.get_config("base_station_coords"))
 window.setup(uwb_plot, base_rover_diff_plot, freq_plot, location_plot)

@@ -6,6 +6,7 @@ from pyqtgraph.Qt import QtWidgets
 from .collectors import DataCollector
 from .plots import LocationPlot
 from .replay import ReplayDriver
+from .utils import POLY_LOOKUP
 
 
 class LoadDataPopup(pg.GraphicsLayoutWidget):
@@ -67,9 +68,9 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
         # font = QtGui.QFont("Times", 10)
         # font = QFont("Helvetica [Cronyx]", 12)
 
-        text_layout = info_layout.addLayout(0, 0)
-        text_layout.addLabel("UWB Anchors", 0, 0, colspan=1)
-        text_layout.addLabel("Fix", 0, 1, colspan=1)
+        # text_layout = info_layout.addLayout(0, 0)
+        # text_layout.addLabel("UWB Anchors", 0, 0, colspan=1)
+        # text_layout.addLabel("Fix", 0, 1, colspan=1)
 
         buttons = info_layout.addLayout(0, 2, colspan=1)
         self.save_button = self.create_button("Save Data", self.on_save)
@@ -83,6 +84,7 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
         self.load_data_menu = self.create_select_menu("Data File", sorted(os.listdir("results/v2")), self.on_file_select)
 
         self.exit_button = self.create_button("Exit", self.on_exit)
+        self.comp_type = self.create_select_menu("Compensation Type", POLY_LOOKUP.keys(), self.on_comp_type)
 
         for i, button in enumerate((self.save_button, self.play_pause_button, self.exit_button, self.sync_anchor_button)):
             buttons.addItem(button, i, 0)
@@ -92,17 +94,18 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
         buttons.addItem(self.load_data_button, 5, 0)
         buttons.addItem(self.replay_data_button, 6, 0)
         buttons.addItem(self.load_config_button, 7, 0)
+        buttons.addItem(self.comp_type, 9, 0)
         buttons.addItem(self.load_data_menu, 8, 0)
 
 
         # buttons.addItem(pg.FeedbackButton("Test", self.on_load_data))
 
-        uwb_count = text_layout.addLabel("0", 1, 0)
-        # uwb_count.setFont(font)
-        fix_perc = text_layout.addLabel("0%", 1, 1)
-
-        uwb_err = text_layout.addLabel("+/- 0cm", 2, 0)
-        fix_err = text_layout.addLabel("+/- 0cm", 2, 1)
+        # uwb_count = text_layout.addLabel("0", 1, 0)
+        # # uwb_count.setFont(font)
+        # fix_perc = text_layout.addLabel("0%", 1, 1)
+        #
+        # uwb_err = text_layout.addLabel("+/- 0cm", 2, 0)
+        # fix_err = text_layout.addLabel("+/- 0cm", 2, 1)
 
         for anchor, location in self.data_collector.get_config("anchor_locations", {}).items():
             self.location_plot.update_location(f"Anchor {anchor}", *location)
@@ -131,8 +134,8 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
         proxy.setWidget(menu)
         return proxy
 
-    def create_button(self, name, callback):
-        btn = QtWidgets.QPushButton(name)
+    def create_button(self, name, callback, cls: QtWidgets.QAbstractButton = QtWidgets.QPushButton):
+        btn = cls(name)
         btn.clicked.connect(callback)
         proxy = QtWidgets.QGraphicsProxyWidget()
         proxy.setWidget(btn)
@@ -155,7 +158,6 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
         #     self.is_static = False
         #     self.load_data_button.widget().setText("Load Data")
         # else:
-        print(self.replay_driver.fp)
         self.is_static = True
         self.data_collector.can_save = False
         # self.load_data_button.widget().setText("Exit Static")
@@ -196,6 +198,11 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
 
     def on_algorithm_select(self, algorithm):
         print(f"Selecting {algorithm}...")
+
+    def on_comp_type(self, selected):
+        self.data_collector.on_comp_type_change(selected)
+        if self.is_static:
+            self.on_load_data()
 
     def on_anchor_sync(self):
         anchor_id = None
