@@ -19,9 +19,10 @@ class BaseRoverDiffPlot(pg.PlotItem):
             axisItems={"bottom": pg.DateAxisItem()},
         )
         self.showGrid(x=True, y=True, alpha=0.3)
-        # self.addLegend(offset=(-30, 10))
-        self.gps_curve = self.plot(name="GNSS", pen="cyan", )
-        self.uwb_curve = self.plot(name="UWB", pen="pink")
+        self.addLegend(offset=(-30, 10))
+        self.gps_curve = self.plot(name="Localised", pen="cyan", )
+        self.uwb_curve = self.plot(name="Base", pen="pink")
+
 
         self.uwb_plot = None  # bit hacky, for now...
 
@@ -32,6 +33,8 @@ class BaseRoverDiffPlot(pg.PlotItem):
         self.min_text = None
         self.med_text = None
         self.std_text = None
+
+        self.latest_error = 0
 
         self.set_text()
         self.sigXRangeChanged.connect(self.on_x_axis_changed)
@@ -46,7 +49,7 @@ class BaseRoverDiffPlot(pg.PlotItem):
             ts = ts.replace(microsecond=(nearest + 1) * precision)
         return ts.timestamp()
 
-    def update_plots(self, gps_data, uwb_data, location_reference):
+    def update_plots(self, gps_data, uwb_data, location_reference, localised_uwb):
         gnss = {}
         gnss_times = []
         gnss_dists = []
@@ -56,6 +59,11 @@ class BaseRoverDiffPlot(pg.PlotItem):
 
         gnss_by_time = {}
         gnss_uwb_diff = {}
+        gnss_loc_by_time = {}
+
+        loc_diff = []
+        loc_diff_ts = []
+
         for r in gps_data:
             dist = math.dist(location_reference, r[1:3])
             ts = self.truncate_ts(r[0])
@@ -63,6 +71,7 @@ class BaseRoverDiffPlot(pg.PlotItem):
             gnss_dists.append(dist)
             gnss_times.append(ts)
             gnss_by_time[ts] = dist
+            gnss_loc_by_time[ts] = r[1:3]
 
         for row in uwb_data:
             ts = self.truncate_ts(row[0])
@@ -74,23 +83,45 @@ class BaseRoverDiffPlot(pg.PlotItem):
             except KeyError:
                 pass  # if we don't have a GNSS record then just skip it
 
-        x = pd.DataFrame(gnss_uwb_diff.values())
-        print(x)
+        for row in localised_uwb:
+            ts = self.truncate_ts(row[0])
+            try:
+                gnss_loc = gnss_loc_by_time[ts]
+                gnss_loc = [gnss_loc[0] - location_reference[0], gnss_loc[1] - location_reference[1]]
+
+                loc_diff.append(math.dist(row[1:3], gnss_loc))
+                loc_diff_ts.append(ts)
+            except KeyError:
+                pass
+
+        self.latest_error = loc_diff[0] if loc_diff else 0
+
+        if not loc_diff:
+            x = pd.DataFrame(gnss_uwb_diff.values())
+            ind = pd.to_datetime(list(gnss_uwb_diff.keys()), unit='s', utc=True)
+        else:
+            x = pd.DataFrame(loc_diff)
+            ind = pd.to_datetime(loc_diff_ts, unit='s', utc=True)
+
+        # print(x)
         y_rolling_avg5 = x.rolling(window=5).mean()
-        print(y_rolling_avg5, type(y_rolling_avg5))
+        # print(y_rolling_avg5, type(y_rolling_avg5))
         self.active_data = y_rolling_avg5
         if not self.active_data.empty:
-            print(len(self.active_data), len(gnss_uwb_diff.keys()))
-            self.active_data.index = pd.to_datetime(list(gnss_uwb_diff.keys()), unit='s', utc=True)
+            # print(len(self.active_data), len(gnss_uwb_diff.keys()))
+            self.active_data.index = ind
 
         # self.gps_curve.setData(gnss_times, gnss_dists)
         # self.uwb_curve.setData(uwb_times, uwb_dists)
         if gnss_uwb_diff:
-            self.uwb_curve.setData(list(gnss_uwb_diff.keys()), y_rolling_avg5[0])
+            self.uwb_curve.setData(list(gnss_uwb_diff.keys()), list(gnss_uwb_diff.values()))
 
         if gnss_times:
             self.uwb_plot.update_plots({"GNSS": list(zip(gnss_times, gnss_dists))})
 
+        if loc_diff:
+            self.gps_curve.setData(loc_diff_ts, loc_diff)
+            # self.getViewBox().setXRange(0, 5)
         self.update_text()
 
     def set_text(self):
@@ -114,7 +145,7 @@ class BaseRoverDiffPlot(pg.PlotItem):
         if self.active_range is None or self.active_data is None or self.active_data.empty:
             return
 
-        print(self.active_data)
+        # print(self.active_data)
         data = self.active_data.between_time(*self.active_range)
         if data.empty:
             print("no data")
@@ -125,7 +156,7 @@ class BaseRoverDiffPlot(pg.PlotItem):
         med = float(data.mean().iloc[0])
         std = float(data.std().iloc[0])
 
-        print("updating text: ", min_val, max_val, med, std)
+        # print("updating text: ", min_val, max_val, med, std)
 
         self.min_text.setText("Min: {:.2f}m\n"
                                "Max: {:.3f}m\n"
@@ -143,7 +174,7 @@ class BaseRoverDiffPlot(pg.PlotItem):
             to_set.append(str(minus_10.time()))
 
         self.active_range = to_set
-        print(self.active_range)
+        # print(self.active_range)
         self.update_text()
 
 
@@ -170,9 +201,12 @@ class FrequencyPlot(pg.PlotItem):
         self.frequency_data.clear()
 
         now = now or datetime.now().timestamp()
-        for anchor, freq in freq_data.items():
-            anchor = f"Anchor {anchor}" if isinstance(anchor, int) else anchor
-            self.plot_data[anchor].append((now, freq))
+        for anchor in self.plot_curves.keys():
+            self.plot_data[anchor].append((now, freq_data.get(anchor, 0)))
+
+        # print("freq data: ", freq_data.keys(), self.plot_curves.keys())
+        for anchor in set(freq_data.keys()) - set(self.plot_curves.keys()):
+            self.plot_data[anchor].append((now, freq_data[anchor]))
 
     def update_plots(self):
         for anchor, data in self.plot_data.items():
@@ -213,6 +247,7 @@ class UWBPlot(pg.PlotItem):
 
     def update_plots(self, uwb_data):
         for anchor, data in uwb_data.items():
+            # print(f"updating uwb: {anchor}, {len(data)}, {data[0]}")
             try:
                 curve = self.plot_curves[anchor]
                 curve.setData(*zip(*data))
@@ -267,8 +302,8 @@ class LocationPlot(pg.PlotItem):
             self.plot_curves[device] = self.plot(
                 easting, northing,
                 pen=None,
-                symbolBrush=pg.intColor(len(self.plot_curves)),
-                symbolSize=2 if device == "GNSS" else 10,
+                symbolBrush=pg.intColor(len(self.plot_curves)) if device != "UWB" else "red",
+                symbolSize=2 if device in ("GNSS", "UWB") else 10,
                 name=str(device),
                 symbol="x"
             )

@@ -34,7 +34,7 @@ Anc_2D = [
 # x, y = sym.symbols("x,y")
 initial = (-120, -40)
 # time_filter = ("04:05:40", "04:06:40")
-time_filter = ("05:04:00", "05:04:30")
+time_filter = ("15:09:30", "15:09:45")
 # data_source = "2024-07-05 14:03:00.171006"
 data_source = "2024-07-05 15:02:00.308097"
 
@@ -62,34 +62,19 @@ anc2.index = pd.to_datetime(anc2.index, unit='s').round('50ms')
 
 gnss_data = pd.read_csv(dir_fp + "gnss.csv", delimiter=',', names=["dt", "northing", "easting"], dtype={"dt": float, "northing": float, "easting": float})
 gnss_data.set_index('dt', inplace=True)
-gnss_data.index = pd.to_datetime(gnss_data.index, unit='s').round('50ms')
+gnss_data.index = pd.to_datetime(gnss_data.index, unit='s').round('50ms') + pd.Timedelta(hours=10)
 gnss_data = gnss_data.between_time(*time_filter)
 gnss_data["northing"] = gnss_data["northing"] - BASE_STATION_COORDS[0]
 gnss_data["easting"] = gnss_data["easting"] - BASE_STATION_COORDS[1]
 
 
 loaded_df = anc0.join(anc1, how='outer').join(anc2, how='outer').join(gnss_data, how='outer')
+loaded_df.set_index(loaded_df.index.values + pd.Timedelta(hours=10), inplace=True)
 loaded_df = loaded_df.between_time(*time_filter)
 loaded_df = loaded_df.resample(rule='50ms').mean()
 
+
 print(len(loaded_df), len(gnss_data))
-
-def perform_kf(Xk, A, Pk, Q, H, R, Z):
-    # 1. Project the state ahead
-    Xk_prev = A * Xk           # There is no control input
-    # 2. Project the error covariance ahead
-    Pk_prev = np.matmul(A, Pk, np.transpose(A)) + Q  # Initial value for Pk shoud be guessed.
-
-    S = np.matmul(H, Pk_prev, np.transpose(H), casting='unsafe') + R   # prepare for the inverse
-
-    # 1. compute the Kalman gain
-    K = (np.matmul(Pk_prev, np.transpose(H)))/S   # K = Pk_prev * H' * inv(S);
-    # 2. update the estimate with measurement Zk
-    Xk = Xk_prev + np.matmul(K, (Z - np.matmul(H, Xk_prev)))
-    # 3. Update the error Covariance
-    Pk = Pk_prev - np.matmul(K, H, Pk_prev)
-    return Xk, Pk
-
 
 results = []
 
@@ -139,6 +124,8 @@ for row in loaded_df.iterrows():
     eqns = []
     for i, known in enumerate(Anc_2D):
         distance = vals[i]
+        print(known, distance)
+
         # print(distance)
         if np.isnan(distance):
             # print(i, distance)
@@ -168,6 +155,7 @@ for row in loaded_df.iterrows():
     res = result.x
     initial = res
     results.append(res)
+    print(result)
 
     # kf.predict()
     # kf.update(res)
@@ -187,20 +175,28 @@ if __name__ == "__main__":
     plt.suptitle("UWB-KF v GNSS", fontsize=14, fontweight='bold')
 
     plt.subplot(321)
-    plt.scatter(s.x[:, 2], s.x[:, 0], c=list(range(len(s.x))))
-    plt.scatter(gnss_data["easting"], gnss_data["northing"], c=list(range(gnss_data.shape[0])), cmap="Wistia")
+    plt.scatter(s.x[:, 2], s.x[:, 0], c="blue", alpha=0.8)
+    plt.scatter(gnss_data["easting"], gnss_data["northing"], c="green", alpha=0.8)
     plt.plot([coord[1] for coord in Anc_2D], [coord[0] for coord in Anc_2D], 'xr')
     plt.title("Tri + KF v GNSS")
     plt.legend(["KF", "GNSS"])
     plt.xlabel("Easting (m)")
     plt.ylabel("Northing (m)")
 
-    ax = plt.gca()
 
     plt.subplot(322)
-    plt.scatter([r[1] for r in results], [r[0] for r in results], c=list(range(len(results))), cmap='cool')
-    plt.scatter(gnss_data["easting"], gnss_data["northing"], c=list(range(gnss_data.shape[0])), cmap="Wistia")
+    ax = plt.gca()
+    plt.scatter([r[1] for r in results], [r[0] for r in results],  c="blue", alpha=0.8)
+    plt.scatter(gnss_data["easting"], gnss_data["northing"],  c="green", alpha=0.8)
     plt.plot([coord[1] for coord in Anc_2D], [coord[0] for coord in Anc_2D], 'xr')
+    ax.annotate(
+        "Start",
+        xy=(gnss_data["easting"][0], gnss_data["northing"][0]),
+        arrowprops=dict(arrowstyle="->"),
+        xytext=(8, 8),
+        textcoords='offset points',
+    )
+
     plt.title("Tri v GNSS")
     plt.legend(["Tri", "GNSS"])
     plt.xlabel("Easting (m)")

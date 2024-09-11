@@ -1,7 +1,10 @@
 import copy
+import math
+import threading
 import time
 import traceback
 
+import pandas as pd
 import serial
 
 from scipy.optimize import least_squares
@@ -59,12 +62,17 @@ def _do_update_location(device, data, relative=True):
 
 
 def update_location(only_last: bool = True):
+    # print("updating location")
+    between = uwb_plot.getViewBox().viewRange()[0]
     if only_last:
-        _do_update_location("GNSS", data_collector.get_last_gnss())
-        _do_update_location("UWB", data_collector.get_last_localised())
+        _do_update_location("GNSS", data_collector.get_recent_gnss(between=between, exclude_ts=True))
+        _do_update_location("UWB", data_collector.get_recent_uwb_localised(between=between, exclude_ts=True), relative=False)
     else:
-        d = data_collector.get_recent_gnss(between=uwb_plot.getViewBox().viewRange()[0])
+        d = data_collector.get_recent_gnss(between=between, exclude_ts=True)
         _do_update_location("GNSS", d)
+
+        uwb = data_collector.get_recent_uwb_localised(between=between, exclude_ts=True)
+        _do_update_location("UWB", uwb, relative=False)
 
 
 def serial_gnss():
@@ -129,10 +137,12 @@ def serial_uwb():
 
 def check_frequency():
     while True:
+        time.sleep(1)
         if window.is_static:
             continue
+        if replay_driver.is_live and replay_driver.pause_threads:
+            continue
 
-        time.sleep(1)
         if replay_driver.is_live and replay_driver.latest_time:
             freq_plot.clear_and_track_events(now=replay_driver.latest_time.timestamp())
         else:
@@ -140,38 +150,63 @@ def check_frequency():
 
 
 def uwb_localise():
-    initial = (0, 0)
     while True:
-        if window.is_static:
+        time.sleep(0.05)
+        if window.is_static or replay_driver.is_live and replay_driver.pause_threads:
+            time.sleep(1)
             continue
 
-        time.sleep(0.025)
-        with data_collector.last_uwb_lock:
-            last_uwb = copy.deepcopy(data_collector.last_uwb)
-            data_collector.last_uwb.clear()
-
-        if not last_uwb:
-            continue
-
-        known_points = data_collector.get_config("anchor_locations", {})
-        # x, y = sym.symbols("x,y")
-        eqns = []
-        for anchor, data in last_uwb.items():
-            known = known_points.get(str(anchor))
-            if not known:
+        try:
+            recent = data_collector.get_last_uwb_combined()
+            # print(f"uwb recent: {recent}")
+            if not recent:
                 continue
+            data_collector.update_localiser(recent)
+            # print("done localise")
+        except Exception as e:
+            print(f"exc: {e}")
 
-            distance = data[0]
-            eqns.append(lambda x, y: (x-known[0])**2 + (y-known[1])**2 - distance**2)
 
-        def _guess(guess):
-            x, y = guess
-            return [eqn(x, y) for eqn in eqns]
+def update_base_rover_diff(recent_gnss=None, uwb_base=None, base_station_coords=None, recent_localised=None, from_static=False):
+    base_station_anchor = data_collector.get_config("base_station_anchor")
 
-        result = least_squares(_guess, initial)
-        res = result.x
-        data_collector.record_localised_result(*res)
-        initial = res
+    if not recent_gnss:
+        recent_gnss = data_collector.get_recent_gnss(fetch_all=from_static)
+    if not uwb_base:
+        recent_uwb = data_collector.get_recent_uwb(fetch_all=from_static)
+        uwb_base = recent_uwb.get(base_station_anchor, [])
+
+    if not base_station_coords:
+        base_station_coords = data_collector.get_config("base_station_coords")
+
+    if not recent_localised:
+        recent_localised = data_collector.get_recent_uwb_localised(fetch_all=from_static)
+
+    base_rover_diff_plot.update_plots(
+        recent_gnss,
+        uwb_base,
+        base_station_coords,
+        recent_localised,
+    )
+
+
+def update_text(recent_gnss=None):
+    if not recent_gnss:
+        recent_gnss = data_collector.get_recent_gnss()
+
+    if recent_gnss:
+        gnss_df = recent_gnss[:10]
+        dt = gnss_df[0][0] - gnss_df[-1][0]
+        dist = math.dist(gnss_df[0][1:3], gnss_df[-1][1:3])
+        speed = round(dist / dt * 3.6, 1)
+    else:
+        speed = 0
+
+    latest_uwb = data_collector.get_last_uwb_combined()
+    window.error_text.setText(f"{round(base_rover_diff_plot.latest_error, 1)}m")
+    anc_count = len([n for n in latest_uwb if n is not None]) - 1 if latest_uwb else 0
+    window.anc_text.setText(f"{anc_count}")
+    window.speed_text.setText(f"{speed}km/h")
 
 
 def update_plots(from_static=False):
@@ -182,32 +217,33 @@ def update_plots(from_static=False):
         base_station_anchor = data_collector.get_config("base_station_anchor")
         base_station_coords = data_collector.get_config("base_station_coords")
         recent_uwb = data_collector.get_recent_uwb(fetch_all=from_static)
-        uwb_base = recent_uwb.get(base_station_anchor, [])
+        uwb_base = recent_uwb.get(str(base_station_anchor), [])
 
         uwb_plot.update_plots(recent_uwb)
 
         recent_gnss = data_collector.get_recent_gnss(fetch_all=from_static)
+        recent_localised = data_collector.get_recent_uwb_localised(fetch_all=from_static)
 
-        base_rover_diff_plot.update_plots(
-            recent_gnss,
-            uwb_base,
-            base_station_coords
-        )
+        update_base_rover_diff(recent_gnss, uwb_base, base_station_coords, recent_localised)
+        freq_plot.update_plots()
+        update_text(recent_gnss)
+
+        if from_static is True:
+            print("from static...")
 
         if from_static:
+            freq_plot.load_from_static(recent_uwb)
+            freq_plot.load_from_static({"GNSS": recent_gnss})
+            freq_plot.update_plots()
             freq_plot.autoRange()
             uwb_plot.autoRange()
             base_rover_diff_plot.autoRange()
-            freq_plot.load_from_static(recent_uwb)
-            freq_plot.load_from_static({"GNSS": recent_gnss})
-
-        freq_plot.update_plots()
 
         if data_collector.get_config("scrolling_timestamp", True) is True and not from_static:
             if replay_driver.is_live and replay_driver.latest_time:
-                set_xaxis_timestamp_range(freq_plot, now=replay_driver.latest_time)
+                set_xaxis_timestamp_range(freq_plot, uwb_plot, base_rover_diff_plot, now=replay_driver.latest_time)
             else:
-                set_xaxis_timestamp_range(freq_plot)
+                set_xaxis_timestamp_range(freq_plot, uwb_plot, base_rover_diff_plot)
 
         update_location(only_last=not from_static)
 
@@ -221,6 +257,9 @@ synced_plots = [uwb_plot, base_rover_diff_plot, freq_plot]
 
 
 def on_new_range_set(box: pg.ViewBox):
+    if not window.is_static:
+        return
+
     new_range = box.viewRange()
     for p in synced_plots:
         if p.getViewBox() != box:
@@ -229,16 +268,19 @@ def on_new_range_set(box: pg.ViewBox):
             p.blockSignals(False)
 
     # update values in main location plot to reflect new time range
-    update_location(only_last=False)
+    update_location(only_last=not window.is_static)
 
 
+freq_plot.sigRangeChanged.connect(on_new_range_set)
 for plot in synced_plots:
     plot.sigRangeChanged.connect(on_new_range_set)
-
 
 timer = pg.QtCore.QTimer()
 timer.timeout.connect(update_plots)
 timer.start(50)
+
+for t in [check_frequency, uwb_localise]:
+    threading.Thread(target=t).start()
 
 pg.exec()
 

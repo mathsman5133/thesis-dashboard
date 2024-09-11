@@ -17,6 +17,8 @@ POLY_LOOKUP = {
     "Long-Range3": LR_POLY3,
 }
 
+BASE_STATION_COORDS = (6160188.9135, 235476.0090)
+
 
 def set_xaxis_timestamp_range(*plots, now=None):
     now = now or datetime.now()
@@ -29,3 +31,6 @@ def apply_heuristic(value, comp_type):
         return value
 
     return value - POLY_LOOKUP[comp_type](value)
+
+def northing_easting_to_local(northing, easting, base_station_coords=BASE_STATION_COORDS):
+    return northing - base_station_coords[0], easting - base_station_coords[1]

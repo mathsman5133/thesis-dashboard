@@ -105,3 +105,11 @@ def decode_gnss_row(row):
 def decode_uwb_row(row, comp_type=None):
     return float(row[0]), apply_heuristic(float(row[1]), comp_type)
     # return datetime.fromtimestamp(float(row[0])), float(row[1])
+
+def decode_combined_uwb_row(row, comp_type=None, ts_as_datetime=False):
+    ts = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S.%f")
+    if ts_as_datetime is False:
+        ts = ts.timestamp()
+
+    return ts, row[1] and apply_heuristic(float(row[1]), comp_type) or None, row[2] and apply_heuristic(float(row[2]), comp_type) or None, row[3] and apply_heuristic(float(row[3]), comp_type) or None
+    # return datetime.fromtimestamp(float(row[0])), float(row[1]), float(row[2])
