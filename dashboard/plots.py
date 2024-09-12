@@ -10,6 +10,9 @@ import pandas as pd
 import pyqtgraph as pg
 
 
+# //            6160189.068799788,
+# //            235476.2946930449
+
 class BaseRoverDiffPlot(pg.PlotItem):
     def __init__(self):
         super().__init__(
@@ -20,9 +23,9 @@ class BaseRoverDiffPlot(pg.PlotItem):
         )
         self.showGrid(x=True, y=True, alpha=0.3)
         self.addLegend(offset=(-30, 10))
-        self.gps_curve = self.plot(name="Localised", pen="cyan", )
-        self.uwb_curve = self.plot(name="Base", pen="pink")
+        self.localised_error = self.plot(name="Localised", pen="cyan", )
 
+        self.plot_curves = {}
 
         self.uwb_plot = None  # bit hacky, for now...
 
@@ -49,45 +52,64 @@ class BaseRoverDiffPlot(pg.PlotItem):
             ts = ts.replace(microsecond=(nearest + 1) * precision)
         return ts.timestamp()
 
-    def update_plots(self, gps_data, uwb_data, location_reference, localised_uwb):
+    def update_plots(self, gps_data, uwb_data, anchor_locations, localised_uwb, base_station_anchor: int):
         gnss = {}
         gnss_times = []
         gnss_dists = []
 
-        uwb_times = []
-        uwb_dists = []
+        # uwb_times = []
+        uwb_dists = {}
 
-        gnss_by_time = {}
-        gnss_uwb_diff = {}
+        # gnss_by_time = {}
+        # gnss_uwb_diff = {}
         gnss_loc_by_time = {}
 
         loc_diff = []
         loc_diff_ts = []
 
+        gnss_by_time = defaultdict(dict)
+
         for r in gps_data:
-            dist = math.dist(location_reference, r[1:3])
-            ts = self.truncate_ts(r[0])
+            for anchor, loc in anchor_locations.items():
+                dist = math.dist(loc, r[1:3])
+                ts = self.truncate_ts(r[0])
+                gnss[ts] = dist
+                gnss_by_time[anchor][ts] = dist
 
-            gnss_dists.append(dist)
-            gnss_times.append(ts)
-            gnss_by_time[ts] = dist
-            gnss_loc_by_time[ts] = r[1:3]
+                if str(anchor) == str(base_station_anchor):
+                    gnss_dists.append(dist)
+                    gnss_times.append(ts)
+                    gnss_loc_by_time[ts] = r[1:3]
 
-        for row in uwb_data:
-            ts = self.truncate_ts(row[0])
-            uwb_times.append(ts)
-            uwb_dists.append(row[1])
+            # dist = math.dist(location_reference, r[1:3])
+            # ts = self.truncate_ts(r[0])
 
-            try:
-                gnss_uwb_diff[ts] = row[1] - gnss_by_time[ts]
-            except KeyError:
-                pass  # if we don't have a GNSS record then just skip it
+            # gnss_by_time[ts] = dist
 
+        for anchor, data in uwb_data.items():
+            anchor = str(anchor)
+            res = {}
+            # dists = []
+            for timestamp, distance in data:
+                ts = self.truncate_ts(timestamp)
+                # times.append(ts)
+
+                try:
+                    res[ts] = distance - gnss_by_time[anchor][ts]
+                    # dists.append(row[1] - gnss_by_time[ts])
+                    # gnss_uwb_diff[ts] = row[1] - gnss_by_time[ts]
+                except KeyError:
+                    pass  # if we don't have a GNSS record then just skip it
+
+            # uwb_times[anchor] = res
+            uwb_dists[anchor] = res
+
+        base_station_pos = anchor_locations[str(base_station_anchor)]
         for row in localised_uwb:
             ts = self.truncate_ts(row[0])
             try:
                 gnss_loc = gnss_loc_by_time[ts]
-                gnss_loc = [gnss_loc[0] - location_reference[0], gnss_loc[1] - location_reference[1]]
+                gnss_loc = [gnss_loc[0] - base_station_pos[0], gnss_loc[1] - base_station_pos[1]]
 
                 loc_diff.append(math.dist(row[1:3], gnss_loc))
                 loc_diff_ts.append(ts)
@@ -96,12 +118,12 @@ class BaseRoverDiffPlot(pg.PlotItem):
 
         self.latest_error = loc_diff[0] if loc_diff else 0
 
-        if not loc_diff:
-            x = pd.DataFrame(gnss_uwb_diff.values())
-            ind = pd.to_datetime(list(gnss_uwb_diff.keys()), unit='s', utc=True)
-        else:
-            x = pd.DataFrame(loc_diff)
-            ind = pd.to_datetime(loc_diff_ts, unit='s', utc=True)
+        # if not loc_diff:
+        #     x = pd.DataFrame(gnss_uwb_diff.values())
+        #     ind = pd.to_datetime(list(gnss_uwb_diff.keys()), unit='s', utc=True)
+        # else:
+        x = pd.DataFrame(loc_diff)
+        ind = pd.to_datetime(loc_diff_ts, unit='s', utc=True)
 
         # print(x)
         y_rolling_avg5 = x.rolling(window=5).mean()
@@ -113,14 +135,18 @@ class BaseRoverDiffPlot(pg.PlotItem):
 
         # self.gps_curve.setData(gnss_times, gnss_dists)
         # self.uwb_curve.setData(uwb_times, uwb_dists)
-        if gnss_uwb_diff:
-            self.uwb_curve.setData(list(gnss_uwb_diff.keys()), list(gnss_uwb_diff.values()))
+        # print(uwb_dists)
+        for anchor, data in uwb_dists.items():
+            self.maybe_plot(anchor, list(data.keys()), list(data.values()))
+
+        # if gnss_uwb_diff:
+        #     self.uwb_curve.setData(list(gnss_uwb_diff.keys()), list(gnss_uwb_diff.values()))
 
         if gnss_times:
             self.uwb_plot.update_plots({"GNSS": list(zip(gnss_times, gnss_dists))})
 
         if loc_diff:
-            self.gps_curve.setData(loc_diff_ts, loc_diff)
+            self.localised_error.setData(loc_diff_ts, loc_diff)
             # self.getViewBox().setXRange(0, 5)
         self.update_text()
 
@@ -177,6 +203,17 @@ class BaseRoverDiffPlot(pg.PlotItem):
         # print(self.active_range)
         self.update_text()
 
+    def maybe_plot(self, anchor, x, y):
+        try:
+            curve = self.plot_curves[anchor]
+            curve.setData(x, y)
+        except KeyError:
+            self.plot_curves[anchor] = self.plot(
+                x, y,
+                pen=pg.intColor(len(self.plot_curves)),
+                name=f"Anchor {anchor}",
+            )
+
 
 class FrequencyPlot(pg.PlotItem):
     def __init__(self):
@@ -216,7 +253,7 @@ class FrequencyPlot(pg.PlotItem):
             except KeyError:
                 self.plot_curves[anchor] = self.plot(
                     *zip(*data),
-                    pen=pg.intColor(len(self.plot_curves)),
+                    pen=pg.intColor(len(self.plot_curves) - 1),
                     name=f"Anchor {anchor}",
 
                 )

@@ -167,26 +167,29 @@ def uwb_localise():
             print(f"exc: {e}")
 
 
-def update_base_rover_diff(recent_gnss=None, uwb_base=None, base_station_coords=None, recent_localised=None, from_static=False):
+def update_base_rover_diff(recent_gnss=None, recent_uwb=None, anchor_locations=None, recent_localised=None, from_static=False):
     base_station_anchor = data_collector.get_config("base_station_anchor")
 
     if not recent_gnss:
         recent_gnss = data_collector.get_recent_gnss(fetch_all=from_static)
-    if not uwb_base:
+    if not recent_uwb:
         recent_uwb = data_collector.get_recent_uwb(fetch_all=from_static)
-        uwb_base = recent_uwb.get(base_station_anchor, [])
+        anchor_locations = data_collector.get_config("anchor_locations")
 
-    if not base_station_coords:
-        base_station_coords = data_collector.get_config("base_station_coords")
+        # uwb_base = recent_uwb.get(base_station_anchor, [])
+
+    # if not base_station_coords:
+    #     base_station_coords = data_collector.get_config("base_station_coords")
 
     if not recent_localised:
         recent_localised = data_collector.get_recent_uwb_localised(fetch_all=from_static)
 
     base_rover_diff_plot.update_plots(
         recent_gnss,
-        uwb_base,
-        base_station_coords,
+        recent_uwb,
+        anchor_locations,
         recent_localised,
+        base_station_anchor,
     )
 
 
@@ -215,16 +218,17 @@ def update_plots(from_static=False):
             return
 
         base_station_anchor = data_collector.get_config("base_station_anchor")
-        base_station_coords = data_collector.get_config("base_station_coords")
+        # base_station_coords = data_collector.get_config("base_station_coords")
+        anchor_locations = data_collector.get_config("anchor_locations")
         recent_uwb = data_collector.get_recent_uwb(fetch_all=from_static)
-        uwb_base = recent_uwb.get(str(base_station_anchor), [])
+        # uwb_base = recent_uwb.get(str(base_station_anchor), [])
 
         uwb_plot.update_plots(recent_uwb)
 
         recent_gnss = data_collector.get_recent_gnss(fetch_all=from_static)
         recent_localised = data_collector.get_recent_uwb_localised(fetch_all=from_static)
 
-        update_base_rover_diff(recent_gnss, uwb_base, base_station_coords, recent_localised)
+        update_base_rover_diff(recent_gnss, recent_uwb, anchor_locations, recent_localised, base_station_anchor)
         freq_plot.update_plots()
         update_text(recent_gnss)
 

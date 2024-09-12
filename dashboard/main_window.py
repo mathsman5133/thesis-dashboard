@@ -181,6 +181,10 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
         self.data_collector.fp = self.replay_driver.fp
         self.data_collector.load()
 
+        # anchors = self.data_collector.get_config("anchor_locations", {})
+        # self.location_plot.update_location("Anchor 1", *anchors["1"])
+        # self.location_plot.update_location("Anchor 0", *anchors["0"])
+        # self.location_plot.update_location("Anchor 2", *anchors["2"])
         for anchor, location in self.data_collector.get_config("anchor_locations", {}).items():
             self.location_plot.update_location(f"Anchor {anchor}", *location)
 
