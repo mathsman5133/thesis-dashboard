@@ -33,7 +33,7 @@ class LoadDataPopup(pg.GraphicsLayoutWidget):
             combobox1.addItem(directory)
 
     def create_button(self, name, callback):
-        btn = QtWidgets.Q(name)
+        btn = QtWidgets.QPushButton(name)
         btn.clicked.connect(callback)
         proxy = QtWidgets.QGraphicsProxyWidget()
         proxy.setWidget(btn)
@@ -204,13 +204,13 @@ class GraphicsLayout(pg.GraphicsLayoutWidget):
 
     def on_relocalise(self):
         print("Doing re-localisation", len(self.data_collector.localiser.trilat_results))
-        self.data_collector.localiser.last_guess = (0, 0)
+        # self.data_collector.localiser.last_guess = (0, 0)
         self.data_collector.localiser.trilat_results.clear()
         self.data_collector.localiser.kf_results.clear()
 
         gnss_data = self.data_collector.get_recent_gnss(between=self.uwb_plot.getViewBox().viewRange()[0], exclude_ts=True)
-        d = self.data_collector.localiser.last_guess = northing_easting_to_local(gnss_data[0][0], gnss_data[0][1])
-        print(f"Initial guess: {d}, {d[0] - 6160188.9135}, {d[1] - 235476.0090}")
+        # d = self.data_collector.localiser.last_guess = northing_easting_to_local(gnss_data[0][0], gnss_data[0][1])
+        # print(f"Initial guess: {d}, {d[0] - 6160188.9135}, {d[1] - 235476.0090}")
 
         data = self.data_collector.get_recent_combined_uwb(between=self.uwb_plot.getViewBox().viewRange()[0])
         self.data_collector.localiser.mass_update(data)

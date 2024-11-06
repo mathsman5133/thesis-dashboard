@@ -13,6 +13,13 @@ import pyqtgraph as pg
 # //            6160189.068799788,
 # //            235476.2946930449
 
+colours = {
+    "GNSS": "cyan",
+    "0": "red",
+    "1": "orange",
+    "2": "green",
+}
+
 class BaseRoverDiffPlot(pg.PlotItem):
     def __init__(self):
         super().__init__(
@@ -124,14 +131,19 @@ class BaseRoverDiffPlot(pg.PlotItem):
         # else:
         x = pd.DataFrame(loc_diff)
         ind = pd.to_datetime(loc_diff_ts, unit='s', utc=True)
-
+        # if uwb_dists:
+        #     x = pd.DataFrame(list(uwb_dists["0"].values()))
+        #     ind = pd.to_datetime(list(uwb_dists["0"].keys()), unit='s', utc=True)
+        #     print(x)
         # print(x)
         y_rolling_avg5 = x.rolling(window=5).mean()
         # print(y_rolling_avg5, type(y_rolling_avg5))
-        self.active_data = y_rolling_avg5
+        self.active_data = x
         if not self.active_data.empty:
             # print(len(self.active_data), len(gnss_uwb_diff.keys()))
             self.active_data.index = ind
+
+        self.update_text()
 
         # self.gps_curve.setData(gnss_times, gnss_dists)
         # self.uwb_curve.setData(uwb_times, uwb_dists)
@@ -169,6 +181,7 @@ class BaseRoverDiffPlot(pg.PlotItem):
 
     def update_text(self):
         if self.active_range is None or self.active_data is None or self.active_data.empty:
+            print("no active data" + str(self.active_data))
             return
 
         # print(self.active_data)
@@ -210,7 +223,10 @@ class BaseRoverDiffPlot(pg.PlotItem):
         except KeyError:
             self.plot_curves[anchor] = self.plot(
                 x, y,
-                pen=pg.intColor(len(self.plot_curves)),
+                # symbol="o",
+                # symbolBrush=colours.get(anchor, pg.intColor(len(self.plot_curves))),
+                pen=colours.get(anchor, pg.intColor(len(self.plot_curves))),
+                # pen=pg.intColor(len(self.plot_curves)),
                 name=f"Anchor {anchor}",
             )
 
@@ -253,7 +269,8 @@ class FrequencyPlot(pg.PlotItem):
             except KeyError:
                 self.plot_curves[anchor] = self.plot(
                     *zip(*data),
-                    pen=pg.intColor(len(self.plot_curves) - 1),
+                    pen=colours.get(str(anchor), pg.intColor(len(self.plot_curves))),
+                    # pen=pg.intColor(len(self.plot_curves) - 1),
                     name=f"Anchor {anchor}",
 
                 )
@@ -284,6 +301,7 @@ class UWBPlot(pg.PlotItem):
 
     def update_plots(self, uwb_data):
         for anchor, data in uwb_data.items():
+            print(f"updating uwb: {anchor}, {type(anchor)}")
             # print(f"updating uwb: {anchor}, {len(data)}, {data[0]}")
             try:
                 curve = self.plot_curves[anchor]
@@ -291,7 +309,8 @@ class UWBPlot(pg.PlotItem):
             except KeyError:
                 self.plot_curves[anchor] = self.plot(
                     *zip(*data),
-                    pen=pg.intColor(len(self.plot_curves)),
+                    pen=colours.get(str(anchor), pg.intColor(len(self.plot_curves))),
+                    # pen=pg.intColor(len(self.plot_curves)),
                     name=f"Anchor {anchor}",
                     # symbol="o"
                 )

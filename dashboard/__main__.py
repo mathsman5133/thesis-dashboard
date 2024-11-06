@@ -20,6 +20,9 @@ from .plots import BaseRoverDiffPlot, FrequencyPlot, LocationPlot, UWBPlot
 from .replay import ReplayDriver
 from .utils import set_xaxis_timestamp_range
 
+# pg.setConfigOption('background', 'w')
+# pg.setConfigOption('foreground', 'k')
+
 # BASE_STATION_COORDS = (0, 0)
 # BASE_STATION_COORDS = (6244942.8409, 333364.3062)  # northing, easting (centre of plot), sydney
 BASE_STATION_COORDS = (6160188.9135, 235476.0090)  # northing, easting (centre of plot), wingello

@@ -1,0 +1,22 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: UWB Live Localisation Dashboard
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Joshua
+    family-names: Bramley
+    email: joshua.bramley2579@gmail.com
+repository-code: 'https://github.com/mathsman5133/thesis-dashboard'
+abstract: >-
+  This project provides a prototype dashboard and data
+  logger for recording and rendering live data collected
+  from UWB range sensing modules and evaluated against a
+  NovAtel GNSS unit. Live rendering, static historical
+  analysis, replay and interactive graphing functionality
+  all forms part of the solution.
+license: MIT
